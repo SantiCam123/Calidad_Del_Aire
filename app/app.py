@@ -3,6 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 import matplotlib.pyplot as plt
 import os
+import json
 
 url = "https://valencia.opendatasoft.com/api/explore/v2.1/catalog/datasets/estacions-contaminacio-atmosferiques-estaciones-contaminacion-atmosfericas/records"
 
@@ -14,7 +15,7 @@ def cargar_datos(url):
 
         response = requests.get(url, timeout=30)
         if response.status_code != 200: # Si la respuesta no es 200, hubo un error
-            print(f"\nError: {response.status_code}\n")
+            print(f"\ERROR: {response.status_code}\n")
 
         else:
 
@@ -80,7 +81,7 @@ def cargar_datos(url):
 
     except requests.exceptions.Timeout:
 
-        print(f"Timed Out\n")
+        print(f"ERROR: Timed Out\n")
 
 def cargar_a_base_de_datos(df):
     print("--- Iniciando carga de datos a la base de datos ---\n")
@@ -94,7 +95,7 @@ def cargar_a_base_de_datos(df):
             print("Conexión a la base de datos exitosa\n")
 
         else:
-            print("Error al conectar a la base de datos\n")
+            print("ERROR: No hay conexión a la base de datos\n")
             return #Salimos de la función si no hay conexión
             
         print("--- Verificando datos en la base de datos ---\n")
@@ -126,12 +127,41 @@ def cargar_a_base_de_datos(df):
         print("Datos cargados a la base de datos exitosamente\n")
 
     except Exception as e:
-        print(f"Error al cargar datos a la base de datos: {e}\n")
+        print(f"ERROR: Fallo en la carga de datos a la base de datos: {e}\n")
+
+def generar_alertas(df):
+    print("--- Generando alertas de calidad del aire ---\n")
+
+    alertas = {} #Diccionario para guardar las alertas
+
+    for row in df.itertuples():
+        if row.no2 > 200 or row.pm10 > 50 or row.pm25 > 25: #Umbrales de alerta
+            print(f"ALERTA: Alta contaminación en {row.nombre}\n")
+
+            alertas[row.nombre] = {
+                "no2": row.no2,
+                "pm10": row.pm10,
+                "pm25": row.pm25,
+            }
+
+        else:
+            print(f"Calidad del aire en {row.nombre} ... NORMAL\n") #No hay alerta, por lo que se muestra "normal"
+        
+    #Guardamos las alertas en un archivo JSON si hay alguna
+    if len(alertas) != 0:
+        json_alertas = json.dumps(alertas, indent=4)
+        with open("../output/actual/alertas_calidad_aire.json", "w") as f:
+            f.write(json_alertas)
+        
+        print("Archivo de alertas generado en output/actual/alertas_calidad_aire.json\n")
+
 
 
 def main():
 
     data = cargar_datos(url)
+
+    generar_alertas(data)
     
     if data is not None:
         cargar_a_base_de_datos(data)
