@@ -65,6 +65,11 @@ def cargar_datos(url):
 
             print("--- Guardando datos en CSV ---\n")
 
+            #Buscamos y borramos los CSV previos en data/raw/
+            for file in os.listdir("data/raw/"):
+                if file.startswith("calidad_aire_raw_") and file.endswith(".csv"):
+                    os.remove(os.path.join("data/raw/", file))
+
             df_json = pd.json_normalize(data['results']) #Usamos json_normalize para guardar solo el apartado de 'results' en bruto
 
             fecha = data['results'][1]['fecha_carg']
