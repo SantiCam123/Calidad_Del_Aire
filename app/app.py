@@ -166,7 +166,10 @@ def generar_alertas(df):
         print("Archivo de alertas generado en output/actual/alertas_calidad_aire.json\n")
 
 def generar_informes():
+    # generamos informaes en html en output/actual y output/historico
     print("--- Generando informes de calidad del aire ---\n")
+
+    # creamos un html base en output/actual y output/historico
     with open("./output/actual/informe_a.html", "w") as archivo:
         archivo.write("<html>")
         archivo.write("<head>")
@@ -192,28 +195,31 @@ def main():
     else:
         print("No se cargaron datos\n")
 
+    # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="Filtra pedidos y genera un resumen de KPIs."
     )
-    # TODO: añade argumentos:
+    # TODO: añade argumentos para opciones de informe actual e historico
     parser.add_argument("--modoactual", action="store_true", required=False, help="Informe del estado actual por estacion.")
     parser.add_argument("--modohistorico", action="store_true", required=False, help="Informe historico de la evolucion temporal por estacion.")
 
     args = parser.parse_args()
-    print("[INFO] Args:", args)  # TEMP: borra al finalizar
 
-    generar_informes()
+    generar_informes() # generamos informes base
 
+    # si se elige la opcion de informe actual
     if args.modoactual:
-        plt.figure(figsize=(15, 6))
+        # generamos gráfica del estado actual por estación de NO2
+        plt.figure(figsize=(15, 6)) 
         plt.bar(data['nombre'], data['no2'], color='skyblue')
         plt.xlabel('Barrio')
         plt.ylabel('NO2 Levels')
         plt.title('Niveles de NO2 por Barrio')
         plt.grid(axis='y')
         # guardar figura png
-        plt.savefig('./output/actual/no2_barrio.png') 
+        plt.savefig('./output/actual/no2_barrio.png') # guardamos la figura en output/actual
 
+        # generamos gráfica del estado actual por estación de PM10
         plt.figure(figsize=(15, 6))
         plt.bar(data['nombre'], data['pm10'], color='skyblue')
         plt.xlabel('Barrio')
@@ -222,12 +228,11 @@ def main():
         plt.grid(axis='y')
         plt.savefig('./output/actual/pm10_barrio.png')
 
+        #Creamos el mapa de Valencia con sus coordenadas
         # mapa valencia
         mapa = folium.Map(location=[39.46975, -0.37739], zoom_start=13)
-        # puntos interes
-        puntos_interes = []
-
-        # Iterate through DataFrame rows to create markers
+        
+        # añadimos las estaciones al mapa
         for idx, row in data.iterrows():
             folium.Marker(
                 location=[row['latitud'], row['longitud']],
@@ -260,11 +265,13 @@ def main():
     
     df_db = pd.read_sql("SELECT * FROM calidad_aire", create_engine("postgresql://postgres:mysecretpassword@localhost:5432/postgres"))
 
+    # si se elige la opcion de informe historico
     if args.modohistorico:
-        # 2025-10-14T09:00:00+00:00
         # pasar timestamp a datetime
         for time in df_db['fecha_carg']:
             df_db['fecha'] = datetime.strptime(time, '%Y-%m-%dT%H:%M:%S%z')
+
+        # generamos gráfica de la evolución histírica de Olivereta de NO2
         plt.figure(figsize=(15, 6))
         dfOlivereta = df_db[df_db['nombre'] == 'Olivereta']
         plt.plot(dfOlivereta['fecha'], dfOlivereta['no2'], marker='o', linestyle='-', color='b')
@@ -275,6 +282,7 @@ def main():
         plt.grid()
         plt.savefig('./output/historico/no2_olivereta.png')
 
+        # generamos gráfica de la evolución histírica de Olivereta de PM10
         plt.figure(figsize=(15, 6))
         dfOlivereta = df_db[df_db['nombre'] == 'Olivereta']
         plt.plot(dfOlivereta['fecha'], dfOlivereta['pm10'], marker='o', linestyle='-', color='b')
@@ -285,6 +293,7 @@ def main():
         plt.grid()
         plt.savefig('./output/historico/pm10_olivereta.png')
 
+        #Combinamos el html con el informe historico
         with open("./output/historico/informe_h.html", "a") as archivo:
 
             archivo.write("<body>")
