@@ -1,9 +1,14 @@
 import requests
+import argparse
 import pandas as pd
 from sqlalchemy import create_engine
 import matplotlib.pyplot as plt
 import os
 import json
+import matplotlib.pyplot as plt
+import pandas as pd
+import folium
+from datetime import datetime
 
 url = "https://valencia.opendatasoft.com/api/explore/v2.1/catalog/datasets/estacions-contaminacio-atmosferiques-estaciones-contaminacion-atmosfericas/records"
 
@@ -160,7 +165,20 @@ def generar_alertas(df):
         
         print("Archivo de alertas generado en output/actual/alertas_calidad_aire.json\n")
 
+def generar_informes():
+    print("--- Generando informes de calidad del aire ---\n")
+    with open("./output/actual/informe_a.html", "w") as archivo:
+        archivo.write("<html>")
+        archivo.write("<head>")
+        archivo.write("<title>Informe actual de Calidad del Aire</title>")
+        archivo.write("</head>")
 
+
+    with open("./output/historico/informe_h.html", "w") as archivo:
+        archivo.write("<html>")
+        archivo.write("<head>")
+        archivo.write("<title>Informe historico de Calidad del Aire</title>")
+        archivo.write("</head>")
 
 def main():
 
@@ -173,6 +191,112 @@ def main():
 
     else:
         print("No se cargaron datos\n")
+
+    parser = argparse.ArgumentParser(
+        description="Filtra pedidos y genera un resumen de KPIs."
+    )
+    # TODO: añade argumentos:
+    parser.add_argument("--modoactual", action="store_true", required=False, help="Informe del estado actual por estacion.")
+    parser.add_argument("--modohistorico", action="store_true", required=False, help="Informe historico de la evolucion temporal por estacion.")
+
+    args = parser.parse_args()
+    print("[INFO] Args:", args)  # TEMP: borra al finalizar
+
+    generar_informes()
+
+    if args.modoactual:
+        plt.figure(figsize=(15, 6))
+        plt.bar(data['nombre'], data['no2'], color='skyblue')
+        plt.xlabel('Barrio')
+        plt.ylabel('NO2 Levels')
+        plt.title('Niveles de NO2 por Barrio')
+        plt.grid(axis='y')
+        # guardar figura png
+        plt.savefig('./output/actual/no2_barrio.png') 
+
+        plt.figure(figsize=(15, 6))
+        plt.bar(data['nombre'], data['pm10'], color='skyblue')
+        plt.xlabel('Barrio')
+        plt.ylabel('PM10 Levels')
+        plt.title('Niveles de PM10 por Barrio')
+        plt.grid(axis='y')
+        plt.savefig('./output/actual/pm10_barrio.png')
+
+        # mapa valencia
+        mapa = folium.Map(location=[39.46975, -0.37739], zoom_start=13)
+        # puntos interes
+        puntos_interes = []
+
+        # Iterate through DataFrame rows to create markers
+        for idx, row in data.iterrows():
+            folium.Marker(
+                location=[row['latitud'], row['longitud']],
+                popup=row['nombre'],
+                tooltip=f"Nombre: {row['nombre']}, NO2: {row['no2']}<br>PM10: {row['pm10']}",
+                icon=folium.Icon(color="blue", icon="info-sign")
+            ).add_to(mapa)
+            
+        PistaSilla = data[data['nombre'] == 'Pista de Silla'].drop(columns=['direccion', 'tipozona', 'tipoemisio',  'latitud', 'longitud'])
+        mapa.save('./output/actual/mapa_estaciones.html')
+
+        #Combinamos el html del mapa con el informe actual
+
+        with open("./output/actual/informe_a.html", "a") as archivo:
+
+            archivo.write("<body>")
+            archivo.write("<h1>Informe actual de Calidad del Aire</h1>\n")
+            archivo.write("<h2>Gráfica de los niveles de NO2 por barrios de Valencia<h2>\n")
+            archivo.write('<img src="no2_barrio.png" alt="Niveles de NO2 por Barrio">\n')
+            archivo.write("<h2>Gráfica de los niveles de PM10 por barrios de Valencia<h2>\n")
+            archivo.write('<img src="pm10_barrio.png" alt="Niveles de PM10 por Barrio">\n')
+            archivo.write("<h2>Mapa de las estaciones de calidad del aire en Valencia<h2>\n")
+            archivo.write('<iframe src="mapa_estaciones.html" width="100%" height="600"></iframe>\n')
+            archivo.write("<h2>Datos de la estación Pista de Silla</h2>\n")
+            archivo.write(PistaSilla.to_html(index=False))
+            archivo.write("</body>")
+            archivo.write("</html>")
+
+        print("Generando informe del estado actual por estacion...")
+    
+    df_db = pd.read_sql("SELECT * FROM calidad_aire", create_engine("postgresql://postgres:mysecretpassword@localhost:5432/postgres"))
+
+    if args.modohistorico:
+        # 2025-10-14T09:00:00+00:00
+        # pasar timestamp a datetime
+        for time in df_db['fecha_carg']:
+            df_db['fecha'] = datetime.strptime(time, '%Y-%m-%dT%H:%M:%S%z')
+        plt.figure(figsize=(15, 6))
+        dfOlivereta = df_db[df_db['nombre'] == 'Olivereta']
+        plt.plot(dfOlivereta['fecha'], dfOlivereta['no2'], marker='o', linestyle='-', color='b')
+        plt.title('Niveles de NO2 a lo largo del tiempo')
+        plt.xticks(rotation=30, ha='right')
+        plt.xlabel('Fecha')
+        plt.ylabel('Niveles de NO2')
+        plt.grid()
+        plt.savefig('./output/historico/no2_olivereta.png')
+
+        plt.figure(figsize=(15, 6))
+        dfOlivereta = df_db[df_db['nombre'] == 'Olivereta']
+        plt.plot(dfOlivereta['fecha'], dfOlivereta['pm10'], marker='o', linestyle='-', color='b')
+        plt.title('Niveles de pm10 a lo largo del tiempo')
+        plt.xticks(rotation=30, ha='right')
+        plt.xlabel('Fecha')
+        plt.ylabel('Niveles de PM10')
+        plt.grid()
+        plt.savefig('./output/historico/pm10_olivereta.png')
+
+        with open("./output/historico/informe_h.html", "a") as archivo:
+
+            archivo.write("<body>")
+            archivo.write("<h1>Informe historico de Calidad del Aire</h1>\n")
+            archivo.write("<h2>Evolucion de los niveles de NO2 de Olivereta<h2>\n")
+            archivo.write('<img src="no2_olivereta.png" alt="Niveles de NO2 Olivereta">\n')
+            archivo.write("<h2>Evolucion de los niveles de PM10 de Olivereta<h2>\n")
+            archivo.write('<img src="pm10_olivereta.png" alt="Niveles de PM10 Olivereta">\n')
+            archivo.write("</body>")
+            archivo.write("</html>")
+
+        print("Generando informe historico de la evolucion temporal por estacion...")
 
     
 
